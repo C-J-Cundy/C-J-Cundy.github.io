@@ -7,11 +7,7 @@ description: Phd Student at Stanford University, advised by <a href="https://cs.
 profile:
   align: left
   image: me.jpg
-  address: >
-  <p><a href="https://cundy.me/publications">Publications</a></p>
-  <p><a href="https://cundy.me/teaching">Teaching</a></p>
-  <p><a href="https://cundy.me/blog">Blog</a></p>
-  
+  address: <p><a href="https://cundy.me/publications">Publications</a></p><p><a href="https://cundy.me/teaching">Teaching</a></p> <p><a href="https://cundy.me/blog">Blog</a></p>
 news: true
 social: true
 ---
