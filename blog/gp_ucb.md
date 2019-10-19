@@ -7,4 +7,6 @@ Gaussian Process-Upper Confidence Bound algorithm which is
 often used to solve the Bayesian Optimization problem.
 
 In this problem, we have some function
-\(f: \mathbb{R}^d \mapsto \mathbb{R}\)	
+$$f: \mathbb{R}^d \mapsto \mathbb{R}$$
+
+In progress
