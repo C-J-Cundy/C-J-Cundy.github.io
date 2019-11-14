@@ -48,7 +48,7 @@ gives us a mean function $$\mu_{t}(x)$$ and a variance
 function $$\sigma_{t}(x)$$. GP-UCB chooses the next point as
 
 $$
-x_{t+1} = \argmin_x\{ \mu_{t}(x) - \beta_t \sigma_{t}(x)\}
+x_{t+1} = \mathrm{argmin}_x \{ \mu_{t}(x) - \beta_t \sigma_{t}(x) \}
 $$
 
 where $$\beta_t$$ is a parameter which is chosen to grow roughly logarithmically
@@ -91,13 +91,13 @@ point $$x_*$$ while conditioning on $$n$$ points in an $$n \times d$$
 matrix $$X$$ is given by
 
 $$
-\mu(x_*) = K(X_*, X)\left[ K(X, X) + \sigma_n^2I_n\right] ^{-1}y
+\mu(x_*) = K(X_*, X) \left[ K(X, X) + \sigma_n^2 I_n\right]^{-1} y
 $$
 
 while the predictive standard deviation is given by
 
 $$
-K(X_*, X_*)\left[ K(X, X) + \sigma_n^2 I_n \right]^{-1} K(X, X_*).
+K(X_*, X_*) \left[ K(X, X) + \sigma_n^2 I_n \right]^{-1} K(X, X_*).
 $$
 
 In both cases, the matrix $$K(X,Z)$$ is the Gram matrix given by
@@ -168,7 +168,7 @@ f(x) = (ax + b)\cdot \sin (\phi x)
 $$
 
 
-<img class="col three" src="{{ site.baseurl }}/assets/img/objective_fun.pdf">
+<img class="col three" src="{{ site.baseurl }}/assets/img/objective_fun.png">
 
 Now we check that the GP is fitting the function properly.
 It seems like it is (after some tweaking of the length scales of the
@@ -184,10 +184,10 @@ To recap, we want to do the following.
 
 First we make a function get the Hessian of an arbitrary function:
 
-{% raw %} {% highlight python %}
+ {% highlight python %}
 def hessian(fun):
     return jit(jacfwd(jacrev(fun)))
-{% endhighlight %} {% endraw %}
+ {% endhighlight %}
 
 Yep, it's that simple in Jax. That being done, we write a function to
 give us the log-barrier function on the d-dimensional box with our
