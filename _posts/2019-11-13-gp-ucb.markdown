@@ -18,7 +18,7 @@ function value $$y_t \sim f(x_t) + \mathcal{N}(0, \sigma^2)$$.
 We want to minimize the cumulative regret
 
 $$
-\sum_{t=0}^{T}f(x_t).
+\centering{\sum_{t=0}^{T}f(x_t)}.
 $$
 
 
