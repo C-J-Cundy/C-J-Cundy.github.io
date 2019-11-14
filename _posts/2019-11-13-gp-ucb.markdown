@@ -186,8 +186,7 @@ First we make a function get the Hessian of an arbitrary function:
 
  {% highlight python %}
 def hessian(fun):
-    return jit(jacfwd(jacrev(fun)))
- {% endhighlight %}
+    return jit(jacfwd(jacrev(fun))) {% endhighlight %}
 
 Yep, it's that simple in Jax. That being done, we write a function to
 give us the log-barrier function on the d-dimensional box with our
@@ -300,11 +299,7 @@ def solve_constrained(x0, xs, ys, length_scale, beta, A):
     """Solve constrained minimization with the sequential unconstrained
     minimization technique, (i.e. we solve sequences of log-barrier problems
     with increasing barrier sharpness and warm-start from the previous
-    solution) and augmented hessian and grad functions. We also
-    do a line search to avoid issues with going out of the constraint box.
-    In the current set-up we don't actually ever use this function, but
-    it is a template for the more heavily-optimized versions of the function
-    which are below and tailored for specific constraints"""
+    solution) and augmented hessian and grad functions. """
     x = x0
     t = 10
     # Tighten approximation to strict constraints
@@ -382,7 +377,9 @@ The output of this looks like this:
 
 <img class="col three" src="{{ site.baseurl }}/assets/img/final_plot.png">
 
-It's a simple matter to change the dimensionality so that we can handle
+We see that the vast majority of the samples are at the actual minimum point,
+and that the algorithm didn't require too many samples at the other points
+to locate the minimum. It's a simple matter to change the dimensionality so that we can handle
 higher-dimensional problems. We expect to see a much-smaller-than-exponential
 increase in the complexity when moving to higher dimensions. 
 
