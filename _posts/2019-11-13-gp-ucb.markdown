@@ -110,7 +110,7 @@ and it is independent of $$X_*$$ we can save time by computing it once and passi
 it as an argument to our function. Writing this all out, we have
 
 
-{% raw %} {% highlight python %}
+ {% highlight python %}
 from __future__ import print_function, division
 import jax.numpy as jaxnp
 import jax.random as jaxrand
@@ -158,7 +158,7 @@ def ucb_val(x, xs, ys, length_scale, beta, A):
     mu, beta_sigma = ucb_vals(x, xs, ys, length_scale, beta, A)
     return mu - beta_sigma
 
-{% endhighlight %} {% endraw %}
+{% endhighlight %} 
 
 As a running example of a tricky global optimization problem, we'll use
 a one-dimensional function with many local minima:
@@ -193,11 +193,11 @@ Yep, it's that simple in Jax. That being done, we write a function to
 give us the log-barrier function on the d-dimensional box with our
 objective:
 
-{% raw %} {% highlight python %}
+ {% highlight python %}
 def log_barrier_ucb_val(x, t, xs, ys, length_scale, beta, A):
     """For use in constrained optimization"""
     return t * ucb_val(x, xs, ys, length_scale, beta, A) + log_barrier(x)
-{% endhighlight %} {% endraw %}
+{% endhighlight %} 
 
 This has a parameter $$t$$ which varies how `sharp' the log barrier is.
 A higher $$t$$ gives a more precise approximation to the hard constraint
@@ -221,10 +221,10 @@ computations. We should be able to make this much faster. The first
 thing to do is to swap in jitted gradient and Hessians. We simply replace
 our line above with
 
-{% raw %} {% highlight python %}
+ {% highlight python %}
 barrier_grad_fn = jit(grad(log_barrier_ucb_val))
 barrier_hess_fn = jit(hessian(log_barrier_ucb_val))
-{% endhighlight %} {% endraw %}
+{% endhighlight %} 
 
 This simple swap doubles the speed of our optimization routine: it now
 only takes one second to run. We now have to start making harder
@@ -254,7 +254,7 @@ so it is quicker to compile than if we wrote out the whole thing.
 Writing everything out, we get this alternative formulation of the
 optimization: 
 
-{% raw %} {% highlight python %}
+ {% highlight python %}
 def oob_linesearch_continue_predicate(loop_state):
     x, nu, diff, j = loop_state
     barrier_term = log_barrier(x + nu * diff)
@@ -316,7 +316,7 @@ def solve_constrained(x0, xs, ys, length_scale, beta, A):
         x = x_out
     return x
 
-{% endhighlight %} {% endraw %}
+{% endhighlight %} 
 
 There are several points worth discussing here. We have formulated the
 problem as two nested while loops, the inner one repeatedly taking
@@ -334,7 +334,7 @@ So now we can put everything together and form the full GP-UCB algorithm,
 which uses the minimum value found as the the next point to sample.
 This looks like this:
 
-{% raw %} {% highlight python %}
+ {% highlight python %}
 def run_gp_ucb(length_scale, sigma=0.1, T=100, num_restarts=20):
     rng = jaxrand.PRNGKey(0)
     # Choose first point randomly
@@ -376,7 +376,7 @@ def run_gp_ucb(length_scale, sigma=0.1, T=100, num_restarts=20):
         ys_log = jaxops.index_update(ys_log, jaxops.index[t], y.reshape((1)))
         print("Sampled with t= {}, took {}s".format(t, time.time() - cur_time))
     return xs_log, ys_log
-{% endhighlight %} {% endraw %}
+{% endhighlight %} 
 
 The output of this looks like this:
 
