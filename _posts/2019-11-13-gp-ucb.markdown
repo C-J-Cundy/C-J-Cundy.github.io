@@ -18,7 +18,7 @@ function value $$y_t \sim f(x_t) + \mathcal{N}(0, \sigma^2)$$.
 We want to minimize the cumulative regret
 
 $$
-{\centering \sum_{t=0}^{T}f(x_t)}.
+\sum_{t=0}^{T}f(x_t).
 $$
 
 
@@ -47,11 +47,11 @@ Given the points up to the current point, you fit a Gaussian process
 to serve as a prediction of the objective function. The Gaussian process
 gives us a mean function $$\mu_{t}(x)$$ and a variance
 function $$\sigma_{t}(x)$$. GP-UCB chooses the next point as
-<p style="text-align: center;">
+
 $$
 x_{t+1} = \argmin_x\{ \mu_{t}(x) - \beta_t \sigma_{t}(x)\}
 $$
-</p>
+
 where $$\beta_t$$ is a parameter which is chosen to grow roughly logarithmically
 with $$t$$. The growth of $$\beta$$ with $$t$$ ensures that the algorithm will eventually
 sample all the points infinitely often. If the algorithm doesn't sample in a region
@@ -90,17 +90,17 @@ Let's start by defining a function to compute the GP-UCB values.
 The Gaussian Process mean function at a predictive
 point $$x_*$$ while conditioning on $$n$$ points in an $$n \times d$$
 matrix $$X$$ is given by
-<p style="text-align: center;">
+
 $$
 \mu(x_*) = K(X_*, X)\left[ K(X, X) + \sigma_n^2I_n\right] ^{-1}y
 $$
-</p>
+
 while the predictive standard deviation is given by
-<p style="text-align: center;">
+
 $$
 K(X_*, X_*)\left[ K(X, X) + \sigma_n^2 I_n \right]^{-1} K(X, X_*).
 $$
-</p>
+
 In both cases, the matrix $$K(X,Z)$$ is the Gram matrix given by
 $$K_{i,j} = k(x_i, z_j)$$. We will use the standard choice of a
 squared exponential kernel $$ k(x, x') = \exp(-\|x - x'\|^2_2 / \ell^2)$$
@@ -163,11 +163,11 @@ def ucb_val(x, xs, ys, length_scale, beta, A):
 
 As a running example of a tricky global optimization problem, we'll use
 a one-dimensional function with many local minima:
-<p style="text-align: center;">
+
 $$
 f(x) = (ax + b)\cdot \sin (\phi x)
 $$
-</p>
+
 
 <img class="col three" src="{{ site.baseurl }}/assets/img/objective_fun.pdf">
 
