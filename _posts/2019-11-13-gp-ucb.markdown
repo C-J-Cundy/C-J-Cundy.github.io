@@ -1,4 +1,7 @@
-Implementing GP-UCB in Jax
+---
+layout: post
+title: Implementing GP-UCB in Jax
+date: 2019-11-13
 ==========================
 
 Here I'll showcase the capabilities of the Jax framework to
@@ -14,7 +17,9 @@ function value $$y_t \sim f(x_t) + \mathcal{N}(0, \sigma^2)$$.
 
 We want to minimize the cumulative regret
 <p style="text-align: center;"> 
-$$ \sum_{t=0}^{T}f(x_t) $$.
+$$
+\sum_{t=0}^{T}f(x_t)
+$$.
 </p>
 
 The objective means that we are interested in both finding
@@ -43,7 +48,9 @@ to serve as a prediction of the objective function. The Gaussian process
 gives us a mean function $$\mu_{t}(x)$$ and a variance
 function $$\sigma_{t}(x)$$. GP-UCB chooses the next point as
 <p style="text-align: center;">
-$$ x_{t+1} = \argmin_x\{ \mu_{t}(x) - \beta_t \sigma_{t}(x)\}$$
+$$
+x_{t+1} = \argmin_x\{ \mu_{t}(x) - \beta_t \sigma_{t}(x)\}
+$$
 </p>
 where $$\beta_t$$ is a parameter which is chosen to grow roughly logarithmically
 with $$t$$. The growth of $$\beta$$ with $$t$$ ensures that the algorithm will eventually
@@ -84,11 +91,15 @@ The Gaussian Process mean function at a predictive
 point $$x_*$$ while conditioning on $$n$$ points in an $$n \times d$$
 matrix $$X$$ is given by
 <p style="text-align: center;">
-$$\mu(x_*) = K(X_*, X)\left[ K(X, X) + \sigma_n^2I_n\right] ^{-1}y$$
+$$
+\mu(x_*) = K(X_*, X)\left[ K(X, X) + \sigma_n^2I_n\right] ^{-1}y
+$$
 </p>
 while the predictive standard deviation is given by
 <p style="text-align: center;">
-$$ K(X_*, X_*)\left[ K(X, X) + \sigma_n^2 I_n \right]^{-1} K(X, X_*).$$
+$$
+K(X_*, X_*)\left[ K(X, X) + \sigma_n^2 I_n \right]^{-1} K(X, X_*).
+$$
 </p>
 In both cases, the matrix $$K(X,Z)$$ is the Gram matrix given by
 $$K_{i,j} = k(x_i, z_j)$$. We will use the standard choice of a
@@ -152,10 +163,13 @@ def ucb_val(x, xs, ys, length_scale, beta, A):
 
 As a running example of a tricky global optimization problem, we'll use
 a one-dimensional function with many local minima:
+<p style="text-align: center;">
+$$
+f(x) = (ax + b)\cdot \sin (\phi x)
+$$
+</p>
 
-$$ f(x) = (ax + b)\cdot \sin (\phi x) $$
-
-![Objective Function](objective_fun.pdf)
+<img class="col three" src="{{ site.baseurl }}/assets/img/objective_fun.pdf">
 
 Now we check that the GP is fitting the function properly.
 It seems like it is (after some tweaking of the length scales of the
@@ -192,7 +206,7 @@ that we want to impose, at the expense of a higher gradient making the
 optimization process harder. This is demonstrated in this great figure
 from Boyd's book on convex optimization:
 
-![Log Barrier Method](boyd_log_barrier.png)
+<img class="col three" src="{{ site.baseurl }}/assets/img/boyd_log_barrier.png">
 
 In practice what we will do is find a minimum for a moderate value of
 $$t$$ then increase $$t$$, minimize again, etc. 
@@ -367,7 +381,7 @@ def run_gp_ucb(length_scale, sigma=0.1, T=100, num_restarts=20):
 
 The output of this looks like this:
 
-![Samples mostly at the minimum](final_plot.png)
+<img class="col three" src="{{ site.baseurl }}/assets/img/final_plot.png">
 
 It's a simple matter to change the dimensionality so that we can handle
 higher-dimensional problems. We expect to see a much-smaller-than-exponential
