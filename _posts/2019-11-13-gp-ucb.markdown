@@ -21,9 +21,8 @@ $$
 \sum_{t=0}^{T}f(x_t).
 $$
 
-
 The objective means that we are interested in both finding
-a global minimum of the $f$, but we also don't want to incur a
+a global minimum of the $$f$$, but we also don't want to incur a
 lot of cost while doing so. Even if we have a pretty good idea of
 where the minimum is, we don't want to choose all our remaining $$x$$s
 to be there, as we could be missing an even better minimum.
