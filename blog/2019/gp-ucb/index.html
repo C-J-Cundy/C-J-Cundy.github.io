@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+  <title>Chris Cundy | Implementing GP-UCB in Jax</title>
+  <meta name="description" content="A simple, whitespace theme for academics. Based on [*folio](https://github.com/bogoli/-folio) design.
+">
+
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+
+  <link rel="stylesheet" href="/assets/css/main.css">
+  <link rel="canonical" href="/blog/2019/gp-ucb/">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    
+    <span class="site-title">
+        
+        <strong>Chris</strong> Cundy
+    </span>
+    
+
+    <nav class="site-nav">
+      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+              <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+              <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+      <div class="trigger">
+        <!-- About -->
+        <a class="page-link" href="/">about</a>
+
+        <!-- Blog -->
+        <a class="page-link" href="/blog/">blog</a>
+
+        <!-- Pages -->
+        
+          
+        
+          
+        
+          
+        
+          
+            <a class="page-link" href="/publications/">publications</a>
+          
+        
+          
+            <a class="page-link" href="/teaching/">teaching</a>
+          
+        
+          
+        
+
+        <!-- CV link -->
+        <!-- <a class="page-link" href="/assets/pdf/CV.pdf">vitae</a> -->
+
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <div class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Implementing GP-UCB in Jax</h1>
+    <p class="post-meta">November 13, 2019</p>
+  </header>
+
+  <article class="post-content">
+    <p>Here I’ll showcase the capabilities of the Jax framework to
+solve some interesting problems. We will be implementing the
+Gaussian Process-Upper Confidence Bound (GP-UCB) algorithm which is
+often used to solve the Bayesian Optimization problem. This is also
+a test of the blog’s capabilities!</p>
+
+<p>In the Bayesian Optimization problem, we have some function
+<script type="math/tex">f: \mathbb{R}^d \mapsto \mathbb{R}</script>. At each timestep we
+choose a point <script type="math/tex">x_t</script> and observe a noisy realization of the
+function value <script type="math/tex">y_t \sim f(x_t) + \mathcal{N}(0, \sigma^2)</script>.</p>
+
+<p>We want to minimize the cumulative regret</p>
+
+<script type="math/tex; mode=display">\sum_{t=0}^{T}f(x_t).</script>
+
+<p>The objective means that we are interested in both finding
+a global minimum of the <script type="math/tex">f</script>, but we also don’t want to incur a
+lot of cost while doing so. Even if we have a pretty good idea of
+where the minimum is, we don’t want to choose all our remaining <script type="math/tex">x</script>s
+to be there, as we could be missing an even better minimum.</p>
+
+<p>An application of this could be in an idealized medical trial, where
+<script type="math/tex">x</script> represents dosage of a drug and <script type="math/tex">f(x)</script> is the patient’s risk of
+adverse outcomes. We want to find a dosage which is good, but at the
+same time we don’t want to cause many adverse outcomes while doing so.</p>
+
+<p>GP-UCB is a popular method for doing Bayesian Optimization, and it also
+has theoretical guarantees upper-bounding the regret (although as is often
+the case, these guarantees depend on knowing parameters of <script type="math/tex">f</script> that you’re
+unlikely to know a-priori). (Although in this setting we want to minimize
+the function instead of maximizing it and so technically we should perhaps
+call the algorithm the GP-Lower Confidence Bound, algorithm it seems that
+GP-UCB is the name used to describe both the function minimization and
+maximization setting).</p>
+
+<p>One advantage of GP-UCB is that it is very straightforward to describe.
+Given the points up to the current point, you fit a Gaussian process
+to serve as a prediction of the objective function. The Gaussian process
+gives us a mean function <script type="math/tex">\mu_{t}(x)</script> and a variance
+function <script type="math/tex">\sigma_{t}(x)</script>. GP-UCB chooses the next point as</p>
+
+<script type="math/tex; mode=display">x_{t+1} = \mathrm{argmin}_x \{ \mu_{t}(x) - \beta_t \sigma_{t}(x) \}</script>
+
+<p>where <script type="math/tex">\beta_t</script> is a parameter which is chosen to grow roughly logarithmically
+with <script type="math/tex">t</script>. The growth of <script type="math/tex">\beta</script> with <script type="math/tex">t</script> ensures that the algorithm will eventually
+sample all the points infinitely often. If the algorithm doesn’t sample in a region
+for many iterations, then <script type="math/tex">\sigma</script> will remain the same while <script type="math/tex">\beta</script> slowly grows
+until the algorithm samples at that point.</p>
+
+<p>Often this algorithm is implemented by discretizing the input space into a set
+of points. In that setting the minimization above simply becomes a linear scan
+over the UCB values at all the grid points, and is very easily implemented. The
+computation of the GP can be handled by any of many packages (I like Scikit-Learn’s
+<code class="highlighter-rouge">GaussianProcessRegressor</code>). But a shortcoming with this approach is that
+it scales very poorly with dimension: even using a grid with 10 points per side
+would be completely intractable to compute in 15 dimensions.</p>
+
+<p>Instead we can implicitly compute the GP objective function, and
+use gradient-based optimization to solve the optimization problem above.
+It’d be nice to use more sophisticated optimization techniques (such as Newton’s
+method) as they’ll converge much faster. However, computing the gradient of the
+GP objective is not completely straightforward, and computing the Hessian is
+even more annoying. With the built-in autodiff capabilities of Jax, this becomes
+as easy as applying the <code class="highlighter-rouge">grad</code> functional to our gp objective!</p>
+
+<p>For simplicity, we are going to use a domain <script type="math/tex">\mathcal{X} = [0, 1]^d</script>.  This means that we need to use a constrained optimization method
+to deal with what happens if the gradient iterates take us out of the
+domain. We will use a <a href="https://www.stat.cmu.edu/~ryantibs/convexopt-S15/scribes/15-barr-method-scribed.pdf">log-barrier
+method</a>
+to solve this constrained optimization problem. Since the gradient
+changes very rapidly near the log barrier, it’s important that we use
+a second-order method to ensure that the optimization remains
+well-conditioned.  We could also have used a <a href="https://ttic.uchicago.edu/~nati/Teaching/TTIC31070/2015/Lecture16.pdf">projected gradient
+method</a>,
+which would probably have been easier to implement.</p>
+
+<p>Let’s start by defining a function to compute the GP-UCB values.
+The Gaussian Process mean function at a predictive
+point <script type="math/tex">x_*</script> while conditioning on <script type="math/tex">n</script> points in an <script type="math/tex">n \times d</script>
+matrix <script type="math/tex">X</script> is given by</p>
+
+<script type="math/tex; mode=display">\mu(x_*) = K(X_*, X) \left[ K(X, X) + \sigma_n^2 I_n\right]^{-1} y</script>
+
+<p>while the predictive standard deviation is given by</p>
+
+<script type="math/tex; mode=display">K(X_*, X_*) \left[ K(X, X) + \sigma_n^2 I_n \right]^{-1} K(X, X_*).</script>
+
+<p>In both cases, the matrix <script type="math/tex">K(X,Z)</script> is the Gram matrix given by
+<script type="math/tex">K_{i,j} = k(x_i, z_j)</script>. We will use the standard choice of a
+squared exponential kernel <script type="math/tex">k(x, x') = \exp(-\|x - x'\|^2_2 / \ell^2)</script>
+with a given length scale hyperparameter <script type="math/tex">\ell</script></p>
+
+<p>Since we re-use the matrix <script type="math/tex">\left[ K(X, X) + \sigma_n^2I_n \right]^{-1}</script>
+and it is independent of <script type="math/tex">X_*</script> we can save time by computing it once and passing
+it as an argument to our function. Writing this all out, we have</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">division</span>
+<span class="kn">import</span> <span class="nn">jax.numpy</span> <span class="k">as</span> <span class="n">jaxnp</span>
+<span class="kn">import</span> <span class="nn">jax.random</span> <span class="k">as</span> <span class="n">jaxrand</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="kn">from</span> <span class="nn">jax</span> <span class="kn">import</span> <span class="n">grad</span><span class="p">,</span> <span class="n">jit</span><span class="p">,</span> <span class="n">vmap</span>
+<span class="kn">import</span> <span class="nn">jax.lax</span> <span class="k">as</span> <span class="n">jaxlax</span>
+
+<span class="k">def</span> <span class="nf">k</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">):</span>
+    <span class="s">"""Squared exponential kernel function. 
+    Input: difference vector between two points"""</span>
+    <span class="k">return</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">jaxnp</span><span class="o">.</span><span class="nb">sum</span><span class="p">(</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">k_vmap</span> <span class="o">=</span> <span class="n">vmap</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">None</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">ucb_vals</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">interrupt_flag</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="s">"""Given a kernel k and a set of points xs, and objective values ys, return
+    the values of mu(x) and sqrt(beta) * sigma(x), where mu, sigma are the mean and
+    variance function of the GP with kernel k conditioned on xs, ys. For
+    convenience we pass in the matrix A = (k(xs, xs) + sigma^2 I)^{-1}"""</span>
+
+    <span class="c"># xs = n x d array</span>
+    <span class="c"># x = 1 x d array</span>
+    <span class="c"># We assume that k has been vectorized so that it can deal with a whole</span>
+    <span class="c"># input batch and return batchwise outs</span>
+    <span class="c"># k is a function b x d -&gt; b, where b is the batch dimension</span>
+    <span class="c"># here we'll only consider stationary kernels</span>
+
+    <span class="c"># If we want to jit functions we can't pass functions (e.g. k) as</span>
+    <span class="c"># arguments, so we need to set the kernel as a global function</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">xs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">xs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="c"># See e.g. eq 2.22 in Rasmussen and Williams for details</span>
+    <span class="c"># mu = k(x, xs) * [k(xs, xs) + sigma^2 I]^{-1} * y</span>
+    <span class="c"># sigma = k(x,x) - k(x, xs) * [k(xs, xs) + sigma^2 I]^{-1} * k(xs, x)</span>
+
+    <span class="n">x_new</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">d</span><span class="p">))</span>
+    <span class="n">k_x_xs</span> <span class="o">=</span> <span class="n">k_vmap</span><span class="p">(</span><span class="n">xs</span> <span class="o">-</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">x_new</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">length_scale</span><span class="p">)</span>
+    <span class="n">mu_x</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">jaxnp</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">k_x_xs</span><span class="p">,</span> <span class="n">A</span><span class="p">),</span> <span class="n">ys</span><span class="p">)</span>
+
+    <span class="n">sigma_x</span> <span class="o">=</span> <span class="n">k_vmap</span><span class="p">(</span><span class="n">jaxnp</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x_new</span><span class="p">),</span> <span class="n">length_scale</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">jaxnp</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">k_x_xs</span><span class="p">,</span> <span class="n">A</span><span class="p">),</span> <span class="n">k_x_xs</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mu_x</span><span class="p">,</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">beta</span><span class="p">)</span> <span class="o">*</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sigma_x</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">ucb_val</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">):</span>
+    <span class="n">mu</span><span class="p">,</span> <span class="n">beta_sigma</span> <span class="o">=</span> <span class="n">ucb_vals</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mu</span> <span class="o">-</span> <span class="n">beta_sigma</span></code></pre></figure>
+
+<p>As a running example of a tricky global optimization problem, we’ll use
+a one-dimensional function with many local minima:</p>
+
+<script type="math/tex; mode=display">f(x) = (ax + b)\cdot \sin (\phi x)</script>
+
+<p><img class="col three" src="/assets/img/objective_fun.png" /></p>
+
+<p>Now we check that the GP is fitting the function properly.
+It seems like it is (after some tweaking of the length scales of the
+GP and the amount of noise). Next we want to implement the
+UCB part of the GP-UCB algorithm.</p>
+
+<p>To recap, we want to do the following.</p>
+
+<ul>
+  <li>Start at a random point in the space</li>
+  <li>Minimize the GP surrogate with Newton’s method and the log-barrier method until we reach a local minimum</li>
+  <li>Start the GP surrogate optimization again from a random point</li>
+  <li>Choose the next sampled point to be the lowest minimum found so far.</li>
+</ul>
+
+<p>First we make a function get the Hessian of an arbitrary function:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">hessian</span><span class="p">(</span><span class="n">fun</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">jit</span><span class="p">(</span><span class="n">jacfwd</span><span class="p">(</span><span class="n">jacrev</span><span class="p">(</span><span class="n">fun</span><span class="p">)))</span> </code></pre></figure>
+
+<p>Yep, it’s that simple in Jax. That being done, we write a function to
+give us the log-barrier function on the d-dimensional box with our
+objective:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">log_barrier_ucb_val</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">):</span>
+    <span class="s">"""For use in constrained optimization"""</span>
+    <span class="k">return</span> <span class="n">t</span> <span class="o">*</span> <span class="n">ucb_val</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span> <span class="o">+</span> <span class="n">log_barrier</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></code></pre></figure>
+
+<p>This has a parameter <script type="math/tex">t</script> which varies how `sharp’ the log barrier is.
+A higher <script type="math/tex">t</script> gives a more precise approximation to the hard constraint
+that we want to impose, at the expense of a higher gradient making the
+optimization process harder. This is demonstrated in this great figure
+from Boyd’s book on convex optimization:</p>
+
+<p><img class="col three" src="/assets/img/boyd_log_barrier.png" /></p>
+
+<p>In practice what we will do is find a minimum for a moderate value of
+<script type="math/tex">t</script> then increase <script type="math/tex">t</script>, minimize again, etc.</p>
+
+<p>Ok, so we have a working optimization step. Since have already seen
+that we are ending up in local minima, we want to be able to run
+this optimization starting from many random restarts: at least
+on the order of the number of points observed so far. To do this we will
+need to speed up the optimization function. With the current
+implementation it takes two seconds to do a single run of the optimization.
+This isn’t really acceptable for what is inherently just a few 5 by 5 matrix
+computations. We should be able to make this much faster. The first
+thing to do is to swap in jitted gradient and Hessians. We simply replace
+our line above with</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="n">barrier_grad_fn</span> <span class="o">=</span> <span class="n">jit</span><span class="p">(</span><span class="n">grad</span><span class="p">(</span><span class="n">log_barrier_ucb_val</span><span class="p">))</span>
+<span class="n">barrier_hess_fn</span> <span class="o">=</span> <span class="n">jit</span><span class="p">(</span><span class="n">hessian</span><span class="p">(</span><span class="n">log_barrier_ucb_val</span><span class="p">))</span></code></pre></figure>
+
+<p>This simple swap doubles the speed of our optimization routine: it now
+only takes one second to run. We now have to start making harder
+optimizations, and venturing into writing our own jitted functions.
+Due to the way Jax compiles functions while jitting them, some of our
+idiomatic python expressions are not allowed. However, there are
+several workarounds. Let’s attempt to jit the <code class="highlighter-rouge">solve_constrained</code>
+function.</p>
+
+<p>We immediately get an error: <code class="highlighter-rouge">TypeError: Abstract value passed to </code>bool<code class="highlighter-rouge">, which requires a concrete value</code>.
+This is saying that the jax compiler can’t figure out the value of the
+<code class="highlighter-rouge">t &gt; t_lim</code> line at compile time. This takes us to the first rule of
+jitting functions: any native python <code class="highlighter-rouge">if</code>, <code class="highlighter-rouge">for</code>, or <code class="highlighter-rouge">while</code> loops have
+to be able to be figured out at compile time. Confusingly however,
+behind the scenes a jitted function is compiled separately for
+differently shaped inputs. So it is ok to write e.g. a for-loop that
+loops over each dimension of a vector, as the compiler knows at compile
+time what the size of the vector. In this case we can just get rid of the
+t_lim and hard-code it to 10000 and put it into an explicit for loop.
+Trying to jit this, we again get the same error about booleans, which
+is in the line search <code class="highlighter-rouge">while</code> condition this time. Since the line search
+really has to be formulated with a breaking condition, we need to reformulate it
+using the <code class="highlighter-rouge">jax.lax.while_loop</code> construct, which allows us to use while loops in jax.
+The LAX that jax compiles to treats the while loop as a single `block’ (no unrolling)
+so it is quicker to compile than if we wrote out the whole thing.</p>
+
+<p>Writing everything out, we get this alternative formulation of the
+optimization:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">oob_linesearch_continue_predicate</span><span class="p">(</span><span class="n">loop_state</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">nu</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">j</span> <span class="o">=</span> <span class="n">loop_state</span>
+    <span class="n">barrier_term</span> <span class="o">=</span> <span class="n">log_barrier</span><span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="n">nu</span> <span class="o">*</span> <span class="n">diff</span><span class="p">)</span>
+    <span class="n">is_infeasible</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">jaxnp</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">barrier_term</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">exceeded_steps</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">j</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">is_infeasible</span> <span class="o">*</span> <span class="n">exceeded_steps</span> <span class="o">==</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">oob_linesearch_step_fn</span><span class="p">(</span><span class="n">loop_state</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">nu</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">j</span> <span class="o">=</span> <span class="n">loop_state</span>
+    <span class="n">nu</span> <span class="o">=</span> <span class="n">nu</span> <span class="o">*</span> <span class="mf">0.5</span>
+    <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">nu</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">j</span> <span class="o">+</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">do_out_of_bounds_linesearch</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">diff</span><span class="p">):</span>
+    <span class="n">nu_0</span> <span class="o">=</span> <span class="mf">1.</span>
+    <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">x_out</span><span class="p">,</span> <span class="n">nu_out</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">jaxlax</span><span class="o">.</span><span class="n">while_loop</span><span class="p">(</span><span class="n">oob_linesearch_continue_predicate</span><span class="p">,</span>
+                                            <span class="n">oob_linesearch_step_fn</span><span class="p">,</span>
+                                            <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">nu_0</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">j</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">x_out</span> <span class="o">+</span> <span class="n">nu_out</span> <span class="o">*</span> <span class="n">diff</span>
+
+
+<span class="k">def</span> <span class="nf">newton_inner_fn</span><span class="p">(</span><span class="n">loop_state</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="n">loop_state</span>
+    <span class="n">diff</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">barrier_hess_fn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">),</span>
+                              <span class="o">-</span><span class="n">barrier_grad_fn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">))</span>
+    <span class="n">x_out</span> <span class="o">=</span> <span class="n">do_out_of_bounds_linesearch</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">diff</span><span class="p">)</span>
+    <span class="c"># x_out, diff = take_newton_step(x, t, xs, ys, length_scale, beta, A)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">x_out</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">newton_inner_continue_predicate</span><span class="p">(</span><span class="n">loop_state</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="n">loop_state</span>
+    <span class="n">inner_tol</span> <span class="o">=</span> <span class="mf">1e-3</span>
+    <span class="n">gradient_norm</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="nb">sum</span><span class="p">(</span><span class="n">diff</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">**</span> <span class="mf">0.5</span>
+    <span class="n">gradient_small_enough</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">gradient_norm</span> <span class="o">&lt;</span> <span class="n">inner_tol</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">exceeded_iters</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">i</span> <span class="o">&gt;</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">gradient_small_enough</span> <span class="o">*</span> <span class="n">exceeded_iters</span> <span class="o">==</span> <span class="mi">0</span>
+
+
+<span class="k">def</span> <span class="nf">solve_constrained</span><span class="p">(</span><span class="n">x0</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">):</span>
+    <span class="s">"""Solve constrained minimization with the sequential unconstrained
+    minimization technique, (i.e. we solve sequences of log-barrier problems
+    with increasing barrier sharpness and warm-start from the previous
+    solution) and augmented hessian and grad functions. """</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">x0</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="c"># Tighten approximation to strict constraints</span>
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+        <span class="n">x_out</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">jaxlax</span><span class="o">.</span><span class="n">while_loop</span><span class="p">(</span><span class="n">newton_inner_continue_predicate</span><span class="p">,</span>
+                                                          <span class="n">newton_inner_fn</span><span class="p">,</span>
+                                                          <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span>
+                                                           <span class="n">x</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">x_out</span>
+    <span class="k">return</span> <span class="n">x</span></code></pre></figure>
+
+<p>There are several points worth discussing here. We have formulated the
+problem as two nested while loops, the inner one repeatedly taking
+Newton steps and calling the linesearch, and the second one handling
+the linesearch.  In each linesearch we have to wrap the loop state up
+into a variable <code class="highlighter-rouge">loop_state</code>. We also have to provide extra
+termination conditions if the loops exceed a certain number of
+iterations. We use the fact that jax converts bools into integers to
+give a termination condition for the linesearch. When we run this, it
+takes a few seconds to compile, but once compiled takes 0.02s to run,
+a saving of 100x over the non-jitted runtime.  This allows us to do
+many repeats, ensuring that we hit the global minimum.</p>
+
+<p>So now we can put everything together and form the full GP-UCB algorithm,
+which uses the minimum value found as the the next point to sample.
+This looks like this:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">run_gp_ucb</span><span class="p">(</span><span class="n">length_scale</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_restarts</span><span class="o">=</span><span class="mi">20</span><span class="p">):</span>
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">jaxrand</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="c"># Choose first point randomly</span>
+    <span class="n">x0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">low</span><span class="o">=-</span><span class="mf">1.</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mf">1.</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">y0</span> <span class="o">=</span> <span class="n">vmap_objective</span><span class="p">(</span><span class="n">x0</span><span class="p">,</span> <span class="n">rng</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)))</span>
+    <span class="n">xs</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">T</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">ys</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">T</span><span class="p">,))</span>
+
+    <span class="c"># Keep track of which xs and ys we have sampled so far</span>
+    <span class="n">xs_log</span> <span class="o">=</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index_update</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">x0</span><span class="p">)</span>
+    <span class="n">ys_log</span> <span class="o">=</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index_update</span><span class="p">(</span><span class="n">ys</span><span class="p">,</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">y0</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">)))</span>
+
+    <span class="n">fast_solve_constrained</span> <span class="o">=</span> <span class="n">jit</span><span class="p">(</span><span class="n">solve_constrained</span><span class="p">)</span>
+    <span class="n">fast_objective</span> <span class="o">=</span> <span class="n">jit</span><span class="p">(</span><span class="n">ucb_val</span><span class="p">)</span>
+    <span class="n">fast_compute_a</span> <span class="o">=</span> <span class="n">jit</span><span class="p">(</span><span class="n">compute_A</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+        <span class="n">best_val</span> <span class="o">=</span> <span class="n">jaxnp</span><span class="o">.</span><span class="n">inf</span>
+        <span class="n">xs</span> <span class="o">=</span> <span class="n">xs_log</span><span class="p">[:</span><span class="n">t</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">ys</span> <span class="o">=</span> <span class="n">ys_log</span><span class="p">[:</span><span class="n">t</span><span class="p">]</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">fast_compute_a</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">)</span>
+
+        <span class="n">rng0</span> <span class="o">=</span> <span class="n">jaxrand</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">x_try</span> <span class="o">=</span> <span class="n">jaxrand</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">rng0</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_restarts</span><span class="p">,),</span> <span class="n">minval</span><span class="o">=-</span><span class="mf">1.</span><span class="p">,</span> <span class="n">maxval</span><span class="o">=</span><span class="mf">1.</span><span class="p">)</span>
+        <span class="n">cur_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_restarts</span><span class="p">):</span>
+            <span class="n">new_x</span> <span class="o">=</span> <span class="n">fast_solve_constrained</span><span class="p">(</span><span class="n">x_try</span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,)),</span> <span class="n">xs</span><span class="p">,</span>
+                                           <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="mf">1.</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+            <span class="c">#optim_y, s = fast_objective(new_x, xs, ys, length_scale, 1., A)</span>
+            <span class="n">try_val</span> <span class="o">=</span> <span class="n">fast_objective</span><span class="p">(</span><span class="n">new_x</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">,</span> <span class="mf">1.</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">try_val</span> <span class="o">&lt;</span> <span class="n">best_val</span><span class="p">:</span>
+                <span class="n">best_x</span> <span class="o">=</span> <span class="n">new_x</span>
+                <span class="n">best_val</span> <span class="o">=</span> <span class="n">try_val</span>
+
+        <span class="c"># Sample at best x val</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">vmap_objective</span><span class="p">(</span><span class="n">best_x</span><span class="p">,</span> <span class="n">rng0</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)))</span>
+        <span class="c"># Update xs, ys</span>
+        <span class="n">xs_log</span> <span class="o">=</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index_update</span><span class="p">(</span><span class="n">xs_log</span><span class="p">,</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="n">t</span><span class="p">,</span> <span class="p">:],</span> <span class="n">best_val</span><span class="p">)</span>
+        <span class="n">ys_log</span> <span class="o">=</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index_update</span><span class="p">(</span><span class="n">ys_log</span><span class="p">,</span> <span class="n">jaxops</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="n">t</span><span class="p">],</span> <span class="n">y</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">)))</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">"Sampled with t= {}, took {}s"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">cur_time</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">xs_log</span><span class="p">,</span> <span class="n">ys_log</span></code></pre></figure>
+
+<p>The output of this looks like this:</p>
+
+<p><img class="col three" src="/assets/img/final_plot.png" /></p>
+
+<p>We see that the vast majority of the samples are at the actual minimum point,
+and that the algorithm didn’t require too many samples at the other points
+to locate the minimum. It’s a simple matter to change the dimensionality so that we can handle
+higher-dimensional problems. We expect to see a much-smaller-than-exponential
+increase in the complexity when moving to higher dimensions.</p>
+
+
+  </article>
+
+  
+
+</div>
+
+      </div>
+    </div>
+
+    <footer>
+
+  <div class="wrapper">
+    &copy; Copyright 2019 Chris Cundy.
+    Powered by <a href="http://jekyllrb.com/" target="_blank">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank">GitHub Pages</a>.
+
+    
+  </div>
+
+</footer>
+
+
+    <!-- Load jQuery -->
+<script src="//code.jquery.com/jquery-1.12.4.min.js"></script>
+
+<!-- Load Common JS -->
+<script src="/assets/js/common.js"></script>
+
+
+<!-- Load KaTeX -->
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css">
+<script src="//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js"></script>
+<script src="/assets/js/katex.js"></script>
+
+
+
+
+<!-- Include custom icon fonts -->
+<link rel="stylesheet" href="/assets/css/fontawesome-all.min.css">
+<link rel="stylesheet" href="/assets/css/academicons.min.css">
+
+<!-- Google Analytics -->
+<script>
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-XXXXXXXXX', 'auto');
+ga('send', 'pageview');
+</script>
+
+
+  </body>
+
+</html>
